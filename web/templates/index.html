@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTZ 云台控制系统 (Web)</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; }
+        .card-header { font-weight: bold; background-color: #e9ecef; }
+        .log-area { 
+            height: 300px; 
+            overflow-y: scroll; 
+            background: #fff; 
+            border: 1px solid #ced4da; 
+            padding: 10px; 
+            font-family: monospace; 
+            font-size: 0.9em;
+        }
+        .config-section { margin-bottom: 15px; border: 1px solid #dee2e6; padding: 10px; border-radius: 5px; }
+        .btn-control { margin: 0 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid" style="max-width: 800px;">
+    <h3 class="mb-4">PTZ 云台控制系统</h3>
+
+    <div class="card mb-3">
+        <div class="card-header">设备配置</div>
+        <div class="card-body">
+            
+            <div class="config-section">
+                <h5>GS232B (本机模拟)</h5>
+                <div class="row g-2 align-items-center">
+                    <div class="col-auto"><label>协议:</label></div>
+                    <div class="col-auto">
+                        <select class="form-select form-select-sm" id="gs232_proto" onchange="toggleProto('gs232')">
+                            <option value="serial">串口</option>
+                            <option value="tcp">TCP</option>
+                        </select>
+                    </div>
+                    <div class="col-auto proto-serial gs232-serial"><label>端口:</label></div>
+                    <div class="col-auto proto-serial gs232-serial">
+                        <select class="form-select form-select-sm port-select" id="gs232_port"></select>
+                    </div>
+                    <div class="col-auto proto-serial gs232-serial"><label>波特率:</label></div>
+                    <div class="col-auto proto-serial gs232-serial">
+                        <select class="form-select form-select-sm" id="gs232_baud">
+                            <option>9600</option><option>19200</option><option>115200</option>
+                        </select>
+                    </div>
+                    <div class="col-auto proto-tcp gs232-tcp" style="display:none"><label>Host:</label></div>
+                    <div class="col-auto proto-tcp gs232-tcp" style="display:none"><input type="text" class="form-control form-control-sm" id="gs232_host" style="width:100px"></div>
+                    <div class="col-auto proto-tcp gs232-tcp" style="display:none"><label>Port:</label></div>
+                    <div class="col-auto proto-tcp gs232-tcp" style="display:none"><input type="number" class="form-control form-control-sm" id="gs232_tcp_port" style="width:70px"></div>
+                </div>
+            </div>
+
+            <div class="config-section">
+                <h5>PELCO (云台设备)</h5>
+                <div class="row g-2 align-items-center mb-2">
+                    <div class="col-auto"><label>协议:</label></div>
+                    <div class="col-auto">
+                        <select class="form-select form-select-sm" id="pelco_proto" onchange="toggleProto('pelco')">
+                            <option value="serial">串口</option>
+                            <option value="tcp">TCP</option>
+                        </select>
+                    </div>
+                     <div class="col-auto proto-serial pelco-serial"><label>端口:</label></div>
+                     <div class="col-auto proto-serial pelco-serial">
+                         <select class="form-select form-select-sm port-select" id="pelco_port"></select>
+                     </div>
+                     <div class="col-auto proto-serial pelco-serial"><label>波特率:</label></div>
+                     <div class="col-auto proto-serial pelco-serial">
+                         <select class="form-select form-select-sm" id="pelco_baud">
+                             <option>2400</option><option>9600</option>
+                         </select>
+                     </div>
+                     </div>
+                <div class="row g-2">
+                    <div class="col-3"><small>Min EL:</small><input type="number" class="form-control form-control-sm" id="min_el"></div>
+                    <div class="col-3"><small>Max EL:</small><input type="number" class="form-control form-control-sm" id="max_el"></div>
+                    <div class="col-3"><small>AZ Offset:</small><input type="number" class="form-control form-control-sm" id="az_offset"></div>
+                    <div class="col-3"><small>Init AZ:</small><input type="number" class="form-control form-control-sm" id="init_az"></div>
+                </div>
+            </div>
+
+            <div class="config-section bg-light">
+                <h5>1602 LCD 设置</h5>
+                <div class="row g-2 align-items-center">
+                    <div class="col-auto">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="lcd_enabled" onchange="toggleLCD()">
+                            <label class="form-check-label" for="lcd_enabled">启用LCD</label>
+                        </div>
+                    </div>
+                    <div class="col-auto"><label>I2C地址:</label></div>
+                    <div class="col-auto"><input type="text" class="form-control form-control-sm" id="lcd_address" placeholder="0x27" value="0x27"></div>
+                </div>
+            </div>
+
+            <div class="config-section border-primary">
+                <h5>AZ/EL 手动调整</h5>
+                <div class="row g-2 mb-2">
+                    <div class="col-auto"><label>水平角度:</label></div>
+                    <div class="col"><input type="number" class="form-control form-control-sm" id="manual_az"></div>
+                    <div class="col-auto"><button class="btn btn-sm btn-primary" onclick="setAngle(0x4B)">执行</button></div>
+                </div>
+                <div class="row g-2">
+                    <div class="col-auto"><label>俯仰角度:</label></div>
+                    <div class="col"><input type="number" class="form-control form-control-sm" id="manual_el"></div>
+                    <div class="col-auto"><button class="btn btn-sm btn-primary" onclick="setAngle(0x4D)">执行</button></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="text-center mb-3">
+        <button id="btn-start" class="btn btn-success btn-control" onclick="toggleSystem()">启动系统</button>
+        <button class="btn btn-warning btn-control" onclick="clearLog()">清除日志</button>
+        <button class="btn btn-primary btn-control" onclick="saveConfig()">保存配置</button>
+    </div>
+
+    <div class="card">
+        <div class="card-header">系统日志</div>
+        <div class="card-body p-0">
+            <div id="log-container" class="log-area"></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    let isRunning = false;
+
+    // [修改] 使用 async/await 确保执行顺序
+    window.onload = async function() {
+        startLogStream();
+        // 必须先加载端口列表，再加载配置
+        await loadPorts();
+        await loadConfig();
+    };
+
+    async function loadPorts() {
+        try {
+            const res = await fetch('/api/serial_ports');
+            const ports = await res.json();
+            document.querySelectorAll('.port-select').forEach(sel => {
+                // 保存当前选中的值（如果有）
+                const currentVal = sel.value;
+                sel.innerHTML = ports.map(p => `<option value="${p}">${p}</option>`).join('');
+                // 如果之前有值且在新列表中，恢复它
+                if (currentVal && ports.includes(currentVal)) {
+                    sel.value = currentVal;
+                }
+            });
+        } catch (e) {
+            console.error("加载端口失败", e);
+        }
+    }
+
+    async function loadConfig() {
+        const res = await fetch('/api/config');
+        const cfg = await res.json();
+        
+        // 辅助函数：安全设置下拉框的值
+        const setSelectValue = (elementId, value) => {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            
+            // 检查该值是否存在于选项中
+            let exists = false;
+            for (let i = 0; i < el.options.length; i++) {
+                if (el.options[i].value == value) {
+                    exists = true;
+                    break;
+                }
+            }
+            
+            // [关键] 如果配置的端口(如COM10)不在扫描列表中，手动创建一个选项并添加进去
+            if (!exists && value) {
+                const option = new Option(value, value);
+                el.add(option);
+            }
+            
+            // 设置选中值
+            el.value = value;
+        };
+
+        // 填充 GS232B
+        document.getElementById('gs232_proto').value = cfg.gs232b.protocol;
+        toggleProto('gs232');
+        if(cfg.gs232b.serial) {
+            setSelectValue('gs232_port', cfg.gs232b.serial.port); // 使用辅助函数
+            document.getElementById('gs232_baud').value = cfg.gs232b.serial.baudrate;
+        }
+
+        // 填充 Pelco
+        document.getElementById('pelco_proto').value = cfg.pelco.protocol;
+        toggleProto('pelco');
+        if(cfg.pelco.serial) {
+            setSelectValue('pelco_port', cfg.pelco.serial.port); // 使用辅助函数
+            document.getElementById('pelco_baud').value = cfg.pelco.serial.baudrate;
+        }
+
+        // 填充 LCD
+        if (cfg.lcd) {
+            document.getElementById('lcd_enabled').checked = cfg.lcd.enabled;
+            document.getElementById('lcd_address').value = cfg.lcd.address;
+        }
+    }
+
+    async function saveConfig() {
+        const config = {
+            gs232b: {
+                protocol: document.getElementById('gs232_proto').value,
+                serial: {
+                    port: document.getElementById('gs232_port').value,
+                    baudrate: parseInt(document.getElementById('gs232_baud').value)
+                }
+            },
+            pelco: {
+                protocol: document.getElementById('pelco_proto').value,
+                serial: {
+                    port: document.getElementById('pelco_port').value,
+                    baudrate: parseInt(document.getElementById('pelco_baud').value)
+                },
+                angle_correction: {
+                    min_elevation: parseFloat(document.getElementById('min_el').value),
+                    max_elevation: parseFloat(document.getElementById('max_el').value),
+                    azimuth_offset: parseFloat(document.getElementById('az_offset').value),
+                    initial_azimuth: parseFloat(document.getElementById('init_az').value)
+                }
+            },
+            lcd: {
+                enabled: document.getElementById('lcd_enabled').checked,
+                address: document.getElementById('lcd_address').value
+            },
+            ui: { topmost: false }
+        };
+
+        await fetch('/api/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+        });
+//        alert('配置已保存');
+    }
+
+    async function toggleSystem() {
+        const action = isRunning ? 'stop' : 'start';
+        const btn = document.getElementById('btn-start');
+        
+        const res = await fetch('/api/system/toggle', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({action: action})
+        });
+        const data = await res.json();
+        
+        if (data.status === 'started') {
+            isRunning = true;
+            btn.innerText = '停止系统';
+            btn.classList.replace('btn-success', 'btn-danger');
+        } else if (data.status === 'stopped') {
+            isRunning = false;
+            btn.innerText = '启动系统';
+            btn.classList.replace('btn-danger', 'btn-success');
+        }
+    }
+
+    async function setAngle(type) {
+        const id = type === 0x4B ? 'manual_az' : 'manual_el';
+        const val = document.getElementById(id).value;
+        if (!val) return;
+
+        await fetch('/api/control/set_angle', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({angle: val, type: type})
+        });
+    }
+
+    function startLogStream() {
+        const evtSource = new EventSource("/api/logs");
+        const logContainer = document.getElementById("log-container");
+        
+        evtSource.onmessage = function(e) {
+            const div = document.createElement("div");
+            div.textContent = e.data;
+            if(e.data.includes("[错误]")) div.style.color = "red";
+            else if(e.data.includes("[命令]")) div.style.color = "blue";
+            
+            logContainer.appendChild(div);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        };
+    }
+
+    function clearLog() {
+        document.getElementById("log-container").innerHTML = "";
+        fetch('/api/control/clear_log', {method: 'POST'});
+    }
+
+    function toggleProto(dev) {
+        const proto = document.getElementById(dev+'_proto').value;
+        const serialEls = document.querySelectorAll(`.${dev}-serial`);
+        const tcpEls = document.querySelectorAll(`.${dev}-tcp`);
+        
+        if (proto === 'serial') {
+            serialEls.forEach(e => e.style.display = 'block');
+            tcpEls.forEach(e => e.style.display = 'none');
+        } else {
+            serialEls.forEach(e => e.style.display = 'none');
+            tcpEls.forEach(e => e.style.display = 'block');
+        }
+    }
+</script>
+</body>
+</html>

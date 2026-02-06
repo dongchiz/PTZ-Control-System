@@ -1,3 +1,7 @@
 pyserial
 ttkbootstrap
 pywin32
+flask           # [新增] Web 服务器
+RPLCD           # [新增] LCD 驱动
+smbus2          # [新增] I2C 通信 for Rplcd
+python-smbus    # [新增] I2C 通信 also for RPLCD

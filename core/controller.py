@@ -4,7 +4,7 @@
 from threading import Thread, Lock
 from core.protocols import PelcoDProtocol, GS232BProtocol
 from hardware.interfaces import SerialHandler, TCPHandler
-
+from hardware.lcd_display import LCDHandler  # 导入类定义，不触发库导入
 
 class ControlSystem:
     def __init__(self, config, log_callback):
@@ -15,13 +15,52 @@ class ControlSystem:
         self._connection_lock = Lock()
         self.gs232b = None
         self.pelco = None
+        self.lcd = None
+        
+        # 创建 LCD 处理器实例 (此时并未连接硬件)
+        self.lcd_handler = LCDHandler(config.get("lcd", {}), self.log)
 
         try:
             self._init_connections()
+            
+            # [修改] 尝试根据配置启动 LCD，但失败不影响主程序
+            if self.config.get("lcd", {}).get("enabled", False):
+                self.set_lcd_state(True)
+                
             self.log("[系统] 硬件初始化成功")
         except Exception as e:
             self.log(f"[错误] 初始化失败: {str(e)}")
             raise
+
+    def set_lcd_state(self, enabled: bool) -> bool:
+        """
+        动态开关 LCD
+        Return: True(操作成功/开启成功), False(开启失败)
+        """
+        if enabled:
+            if self.lcd: return True # 已经是开启状态
+            try:
+                # 更新配置字典中的状态 (内存中)
+                self.config.setdefault("lcd", {})["enabled"] = True
+                # 重新加载配置 (如地址可能变了)
+                self.lcd_handler.config = self.config["lcd"]
+                
+                # 尝试初始化
+                self.lcd_handler.init_display()
+                self.lcd = self.lcd_handler # 标记为活跃
+                self.log("[LCD] 显示屏已启动")
+                return True
+            except Exception as e:
+                self.log(f"[错误] LCD 启动失败: {str(e)}")
+                self.lcd = None
+                return False
+        else:
+            if self.lcd:
+                self.lcd_handler.close()
+                self.lcd = None
+                self.log("[LCD] 显示屏已关闭")
+            self.config.setdefault("lcd", {})["enabled"] = False
+            return True
 
     def _init_connections(self):
         with self._connection_lock:
