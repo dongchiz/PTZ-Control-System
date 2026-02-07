@@ -22,8 +22,6 @@
 
         /* --- 仪表盘样式 --- */
         .gauge-container { display: flex; justify-content: space-around; align-items: flex-end; padding: 20px 0; }
-        
-        /* AZ 罗盘 */
         .az-compass {
             width: 120px; height: 120px;
             border: 4px solid #555;
@@ -32,50 +30,29 @@
             background: #fff;
             box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
         }
-        .az-compass::after { /* 北向标记 */
-            content: 'N'; position: absolute; top: 2px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #999;
-        }
+        .az-compass::after { content: 'N'; position: absolute; top: 2px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #999; }
         .az-needle {
-            width: 4px; height: 50%;
-            background: red;
-            position: absolute;
-            left: 50%; top: 0;
-            margin-left: -2px; /* 居中 */
-            transform-origin: bottom center;
-            transition: transform 0.5s cubic-bezier(0.4, 2.08, 0.55, 0.44); /* 弹性动画 */
-            border-radius: 2px;
-            z-index: 10;
+            width: 4px; height: 50%; background: red; position: absolute; left: 50%; top: 0;
+            margin-left: -2px; transform-origin: bottom center; transition: transform 0.5s cubic-bezier(0.4, 2.08, 0.55, 0.44);
+            border-radius: 2px; z-index: 10;
         }
-        .az-needle::after { /* 针尾 */
-            content: ''; position: absolute; bottom: -5px; left: -3px; width: 10px; height: 10px; background: #333; border-radius: 50%;
-        }
-        
-        /* EL 垂直条 */
+        .az-needle::after { content: ''; position: absolute; bottom: -5px; left: -3px; width: 10px; height: 10px; background: #333; border-radius: 50%; }
         .el-gauge {
-            width: 40px; height: 150px;
-            border: 2px solid #555;
-            background: #eee;
-            position: relative;
-            border-radius: 4px;
+            width: 40px; height: 150px; border: 2px solid #555; background: #eee; position: relative; border-radius: 4px;
         }
         .el-bar {
-            width: 100%;
-            background: linear-gradient(to top, #0d6efd, #0dcaf0);
-            position: absolute;
-            bottom: 0; left: 0;
-            height: 0%; /* 动态变化 */
-            transition: height 0.5s ease-out;
+            width: 100%; background: linear-gradient(to top, #0d6efd, #0dcaf0); position: absolute; bottom: 0; left: 0;
+            height: 0%; transition: height 0.5s ease-out;
         }
-        .el-label-min, .el-label-max {
-            position: absolute; left: 45px; font-size: 12px; color: #666; width: 50px;
-        }
+        .el-label-min, .el-label-max { position: absolute; left: 45px; font-size: 12px; color: #666; width: 50px; }
         .el-label-max { top: -8px; }
         .el-label-min { bottom: -8px; }
     </style>
 </head>
 <body>
 
-<div class="container-fluid" style="max-width: 1200px;"> <h3 class="mb-4">PTZ 云台控制系统</h3>
+<div class="container-fluid" style="max-width: 1200px;">
+    <h3 class="mb-4">PTZ 云台控制系统</h3>
 
     <div class="row">
         <div class="col-md-8">
@@ -93,6 +70,7 @@
                                     <option value="tcp">TCP</option>
                                 </select>
                             </div>
+                            
                             <div class="col-auto proto-serial gs232-serial"><label>端口:</label></div>
                             <div class="col-auto proto-serial gs232-serial">
                                 <select class="form-select form-select-sm port-select" id="gs232_port"></select>
@@ -103,7 +81,16 @@
                                     <option>9600</option><option>19200</option><option>115200</option>
                                 </select>
                             </div>
+
+                            <div class="col-auto proto-tcp gs232-tcp" style="display:none"><label>Host:</label></div>
+                            <div class="col-auto proto-tcp gs232-tcp" style="display:none">
+                                <input type="text" class="form-control form-control-sm" id="gs232_host" placeholder="0.0.0.0" style="width: 120px;">
                             </div>
+                            <div class="col-auto proto-tcp gs232-tcp" style="display:none"><label>Port:</label></div>
+                            <div class="col-auto proto-tcp gs232-tcp" style="display:none">
+                                <input type="number" class="form-control form-control-sm" id="gs232_tcp_port" placeholder="4000" style="width: 80px;">
+                            </div>
+                        </div>
                     </div>
 
                     <div class="config-section">
@@ -116,17 +103,28 @@
                                     <option value="tcp">TCP</option>
                                 </select>
                             </div>
-                             <div class="col-auto proto-serial pelco-serial"><label>端口:</label></div>
-                             <div class="col-auto proto-serial pelco-serial">
-                                 <select class="form-select form-select-sm port-select" id="pelco_port"></select>
-                             </div>
-                             <div class="col-auto proto-serial pelco-serial"><label>波特率:</label></div>
-                             <div class="col-auto proto-serial pelco-serial">
-                                 <select class="form-select form-select-sm" id="pelco_baud">
-                                     <option>2400</option><option>9600</option>
-                                 </select>
-                             </div>
+
+                            <div class="col-auto proto-serial pelco-serial"><label>端口:</label></div>
+                            <div class="col-auto proto-serial pelco-serial">
+                                <select class="form-select form-select-sm port-select" id="pelco_port"></select>
+                            </div>
+                            <div class="col-auto proto-serial pelco-serial"><label>波特率:</label></div>
+                            <div class="col-auto proto-serial pelco-serial">
+                                <select class="form-select form-select-sm" id="pelco_baud">
+                                    <option>2400</option><option>9600</option>
+                                </select>
+                            </div>
+
+                            <div class="col-auto proto-tcp pelco-tcp" style="display:none"><label>Host:</label></div>
+                            <div class="col-auto proto-tcp pelco-tcp" style="display:none">
+                                <input type="text" class="form-control form-control-sm" id="pelco_host" placeholder="192.168.x.x" style="width: 120px;">
+                            </div>
+                            <div class="col-auto proto-tcp pelco-tcp" style="display:none"><label>Port:</label></div>
+                            <div class="col-auto proto-tcp pelco-tcp" style="display:none">
+                                <input type="number" class="form-control form-control-sm" id="pelco_tcp_port" placeholder="23" style="width: 80px;">
+                            </div>
                         </div>
+
                         <div class="row g-2">
                             <div class="col-3"><small>Min EL:</small><input type="number" class="form-control form-control-sm" id="min_el" onchange="updateGaugeRange()"></div>
                             <div class="col-3"><small>Max EL:</small><input type="number" class="form-control form-control-sm" id="max_el" onchange="updateGaugeRange()"></div>
@@ -178,12 +176,9 @@
                 <div class="card-body">
                     <div class="gauge-container">
                         <div class="text-center">
-                            <div class="az-compass">
-                                <div class="az-needle" id="gauge-az-needle"></div>
-                            </div>
+                            <div class="az-compass"><div class="az-needle" id="gauge-az-needle"></div></div>
                             <div class="mt-2 fw-bold" id="gauge-az-val">AZ: 0°</div>
                         </div>
-
                         <div class="text-center" style="margin-left: 20px;">
                             <div class="el-gauge">
                                 <div class="el-label-max" id="gauge-el-max">90</div>
@@ -193,9 +188,7 @@
                             <div class="mt-2 fw-bold" id="gauge-el-val">EL: 0°</div>
                         </div>
                     </div>
-                    <div class="text-muted small text-center mt-2">
-                        * 数据源自回传日志分析
-                    </div>
+                    <div class="text-muted small text-center mt-2">* 数据源自回传日志分析</div>
                 </div>
             </div>
 
@@ -218,9 +211,9 @@
         startLogStream();
         await loadPorts();
         await loadConfig();
+        await checkSystemStatus(); // <--- 新增这一行
     };
 
-    // ... (loadPorts 函数保持不变) ...
     async function loadPorts() {
         try {
             const res = await fetch('/api/serial_ports');
@@ -248,57 +241,93 @@
             el.value = value;
         };
 
-        // ... (GS232, Pelco 填充逻辑保持不变) ...
+        // --- GS232B 加载 ---
         document.getElementById('gs232_proto').value = cfg.gs232b.protocol;
-        toggleProto('gs232');
+        toggleProto('gs232'); // 触发UI切换
+        
+        // 串口参数
         if(cfg.gs232b.serial) {
             setSelectValue('gs232_port', cfg.gs232b.serial.port);
             document.getElementById('gs232_baud').value = cfg.gs232b.serial.baudrate;
         }
+        // TCP参数 (修复：添加加载逻辑)
+        if(cfg.gs232b.tcp) {
+            document.getElementById('gs232_host').value = cfg.gs232b.tcp.host || "";
+            document.getElementById('gs232_tcp_port').value = cfg.gs232b.tcp.port || "";
+        }
 
+        // --- Pelco 加载 ---
         document.getElementById('pelco_proto').value = cfg.pelco.protocol;
-        toggleProto('pelco');
+        toggleProto('pelco'); // 触发UI切换
+        
+        // 串口参数
         if(cfg.pelco.serial) {
             setSelectValue('pelco_port', cfg.pelco.serial.port);
             document.getElementById('pelco_baud').value = cfg.pelco.serial.baudrate;
         }
+        // TCP参数 (修复：添加加载逻辑)
+        if(cfg.pelco.tcp) {
+            document.getElementById('pelco_host').value = cfg.pelco.tcp.host || "";
+            document.getElementById('pelco_tcp_port').value = cfg.pelco.tcp.port || "";
+        }
 
+        // 角度修正
         document.getElementById('min_el').value = cfg.pelco.angle_correction.min_elevation;
         document.getElementById('max_el').value = cfg.pelco.angle_correction.max_elevation;
         document.getElementById('az_offset').value = cfg.pelco.angle_correction.azimuth_offset;
         document.getElementById('init_az').value = cfg.pelco.angle_correction.initial_azimuth;
 
+        // LCD
         if (cfg.lcd) {
             document.getElementById('lcd_enabled').checked = cfg.lcd.enabled;
             document.getElementById('lcd_address').value = cfg.lcd.address;
         }
         
-        // 初始化仪表盘范围
         updateGaugeRange();
     }
 
     async function saveConfig() {
+        // 构建 GS232 配置 (修复：根据协议类型保存不同参数)
+        const gs232Proto = document.getElementById('gs232_proto').value;
+        let gs232Config = { protocol: gs232Proto };
+        if (gs232Proto === 'serial') {
+            gs232Config.serial = {
+                port: document.getElementById('gs232_port').value,
+                baudrate: parseInt(document.getElementById('gs232_baud').value)
+            };
+        } else {
+            gs232Config.tcp = {
+                host: document.getElementById('gs232_host').value,
+                port: parseInt(document.getElementById('gs232_tcp_port').value)
+            };
+        }
+
+        // 构建 Pelco 配置 (修复：根据协议类型保存不同参数)
+        const pelcoProto = document.getElementById('pelco_proto').value;
+        let pelcoConfig = { 
+            protocol: pelcoProto,
+            angle_correction: {
+                min_elevation: parseFloat(document.getElementById('min_el').value),
+                max_elevation: parseFloat(document.getElementById('max_el').value),
+                azimuth_offset: parseFloat(document.getElementById('az_offset').value),
+                initial_azimuth: parseFloat(document.getElementById('init_az').value)
+            }
+        };
+        if (pelcoProto === 'serial') {
+            pelcoConfig.serial = {
+                port: document.getElementById('pelco_port').value,
+                baudrate: parseInt(document.getElementById('pelco_baud').value)
+            };
+        } else {
+            pelcoConfig.tcp = {
+                host: document.getElementById('pelco_host').value,
+                port: parseInt(document.getElementById('pelco_tcp_port').value)
+            };
+        }
+
         const config = {
-            gs232b: {
-                protocol: document.getElementById('gs232_proto').value,
-                serial: {
-                    port: document.getElementById('gs232_port').value,
-                    baudrate: parseInt(document.getElementById('gs232_baud').value)
-                }
-            },
-            pelco: {
-                protocol: document.getElementById('pelco_proto').value,
-                serial: {
-                    port: document.getElementById('pelco_port').value,
-                    baudrate: parseInt(document.getElementById('pelco_baud').value)
-                },
-                angle_correction: {
-                    min_elevation: parseFloat(document.getElementById('min_el').value),
-                    max_elevation: parseFloat(document.getElementById('max_el').value),
-                    azimuth_offset: parseFloat(document.getElementById('az_offset').value),
-                    initial_azimuth: parseFloat(document.getElementById('init_az').value)
-                }
-            },
+            gs232b: gs232Config,
+            pelco: pelcoConfig,
             lcd: {
                 enabled: document.getElementById('lcd_enabled').checked,
                 address: document.getElementById('lcd_address').value
@@ -306,15 +335,46 @@
             ui: { topmost: false }
         };
 
-        await fetch('/api/config', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(config)
-        });
-        console.log('配置已静默保存');
+        try {
+            const res = await fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(config)
+            });
+            if(res.ok) alert('配置已保存');
+            else alert('配置保存失败');
+        } catch(e) { alert('保存配置时发生错误: ' + e); }
     }
 
-    // ... (toggleSystem, setAngle, toggleLCD, toggleProto 等函数保持不变) ...
+
+    async function checkSystemStatus() {
+        try {
+            const res = await fetch('/api/system/status');
+            const data = await res.json();
+            
+            // 如果后端正在运行，强制同步前端状态
+            if (data.running) {
+                isRunning = true;
+                const btn = document.getElementById('btn-start');
+                if (btn) {
+                    btn.innerText = '停止系统';
+                    btn.classList.replace('btn-success', 'btn-danger');
+                }
+            } else {
+                // 如果后端没运行，确保前端也是停止状态 (通常默认就是，但也防万一)
+                isRunning = false;
+                const btn = document.getElementById('btn-start');
+                if (btn) {
+                    btn.innerText = '启动系统';
+                    btn.classList.replace('btn-danger', 'btn-success');
+                }
+            }
+        } catch (e) {
+            console.error("无法获取系统状态", e);
+        }
+    }
+
+
     async function toggleSystem() {
         const action = isRunning ? 'stop' : 'start';
         const btn = document.getElementById('btn-start');
@@ -324,6 +384,7 @@
             body: JSON.stringify({action: action})
         });
         const data = await res.json();
+        
         if (data.status === 'started') {
             isRunning = true;
             btn.innerText = '停止系统';
@@ -332,6 +393,8 @@
             isRunning = false;
             btn.innerText = '启动系统';
             btn.classList.replace('btn-danger', 'btn-success');
+        } else if (data.status === 'error') {
+            alert("错误: " + data.message);
         }
     }
 
@@ -376,6 +439,7 @@
         const proto = document.getElementById(dev+'_proto').value;
         const serialEls = document.querySelectorAll(`.${dev}-serial`);
         const tcpEls = document.querySelectorAll(`.${dev}-tcp`);
+        
         if (proto === 'serial') {
             serialEls.forEach(e => e.style.display = 'block');
             tcpEls.forEach(e => e.style.display = 'none');
@@ -385,10 +449,7 @@
         }
     }
 
-    // --- 新增：仪表盘逻辑 ---
-
     function updateGaugeRange() {
-        // 从输入框读取 Min/Max 用于 EL 表的缩放
         minEl = parseFloat(document.getElementById('min_el').value) || 0;
         maxEl = parseFloat(document.getElementById('max_el').value) || 90;
         document.getElementById('gauge-el-min').innerText = minEl;
@@ -400,7 +461,6 @@
         const logContainer = document.getElementById("log-container");
         
         evtSource.onmessage = function(e) {
-            // 1. 显示日志
             const div = document.createElement("div");
             div.textContent = e.data;
             if(e.data.includes("[错误]")) div.style.color = "red";
@@ -409,30 +469,19 @@
             logContainer.appendChild(div);
             logContainer.scrollTop = logContainer.scrollHeight;
 
-            // 2. [新增] 解析日志更新仪表盘
-            // 日志格式：[系统] 返回：AZ=123 EL=045
             const match = e.data.match(/AZ=(\d+)\s+EL=(\d+)/);
             if (match) {
-                const az = parseInt(match[1]);
-                const el = parseInt(match[2]);
-                updateVisuals(az, el);
+                updateVisuals(parseInt(match[1]), parseInt(match[2]));
             }
         };
     }
 
     function updateVisuals(az, el) {
-        // 更新数值文本
         document.getElementById('gauge-az-val').innerText = `AZ: ${az}°`;
         document.getElementById('gauge-el-val').innerText = `EL: ${el}°`;
-
-        // 更新 AZ 罗盘指针 (旋转)
-        // 假设 0度为正北(向上)，CSS中needle默认向上，直接 rotate(deg) 即可
         document.getElementById('gauge-az-needle').style.transform = `rotate(${az}deg)`;
-
-        // 更新 EL 进度条 (高度)
-        // 计算百分比: (当前值 - 最小值) / (最大值 - 最小值)
         let pct = (el - minEl) / (maxEl - minEl) * 100;
-        pct = Math.max(0, Math.min(100, pct)); // 限制在 0-100%
+        pct = Math.max(0, Math.min(100, pct));
         document.getElementById('gauge-el-bar').style.height = `${pct}%`;
     }
 </script>

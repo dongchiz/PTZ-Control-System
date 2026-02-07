@@ -103,6 +103,15 @@ def toggle_system():
 
     return jsonify({"status": "no_change"})
 
+
+
+@app.route('/api/system/status', methods=['GET'])
+def get_system_status():
+    """获取当前系统运行状态"""
+    return jsonify({"running": state.running})
+
+
+
 @app.route('/api/logs')
 def stream_logs():
     def generate():
