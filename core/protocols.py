@@ -5,9 +5,9 @@ class PelcoDProtocol:
     START_BYTE = 0xFF
     DEFAULT_ADDRESS = 0x01
 
-    def __init__(self, hardware, config):  # 添加 config 参数
+    def __init__(self, hardware, config):
         self.hw = hardware
-        self.config = config  # 保存配置
+        self.config = config
         self.address = self.DEFAULT_ADDRESS
 
     def generate_packet(self, command1=0x00, command2=0x00, data1=0x00, data2=0x00) -> bytes:
@@ -18,9 +18,10 @@ class PelcoDProtocol:
     def query_angle(self, query_cmd: int) -> int:
         packet = self.generate_packet(command2=query_cmd)
 
-        # 清空接收缓冲区
-        while self.hw.recv(1024, timeout=0.1):
-            pass
+        # 清空接收缓冲区 (增加次数限制，防止死循环)
+        flush_limit = 10
+        while flush_limit > 0 and self.hw.recv(1024, timeout=0.05): # 降低超时时间
+            flush_limit -= 1
 
         # 发送指令
         if not self.hw.send(packet):
@@ -29,7 +30,7 @@ class PelcoDProtocol:
         # 循环读取直到获取有效响应
         max_retries = 3
         for _ in range(max_retries):
-            response = self.hw.recv(7, timeout=1.0)
+            response = self.hw.recv(7, timeout=0.5) # 缩短超时时间，提高响应速度
 
             # 跳过空响应和回显包
             if not response or response == packet:
@@ -73,16 +74,43 @@ class PelcoDProtocol:
         packet = self.generate_packet(command2=command, data1=data1, data2=data2)
         return self.hw.send(packet)
 
+    def move(self, direction: str, pan_speed: int = 0x20, tilt_speed: int = 0x20) -> bool:
+        """
+        发送PTZ手动移动指令
+        direction: 'up', 'down', 'left', 'right', 'stop'
+        默认速度: 0x2F
+        """
+        command2 = 0x00
+        data1 = 0x00
+        data2 = 0x00
+
+        if direction == 'stop':
+            command2 = 0x00
+            data1 = 0x00
+            data2 = 0x00
+        else:
+            data1 = pan_speed
+            data2 = tilt_speed
+            
+            if direction == 'right':
+                command2 = 0x02
+            elif direction == 'left':
+                command2 = 0x04
+            elif direction == 'up':
+                command2 = 0x08
+            elif direction == 'down':
+                command2 = 0x10
+        
+        packet = self.generate_packet(command2=command2, data1=data1, data2=data2)
+        return self.hw.send(packet)
+
     def _validate_response(self, response: bytes) -> bool:
         """验证配置有效性"""
         expected_checksum = sum(response[1:-1]) % 256
         actual_checksum = response[-1]
-        # 俯仰角范围验证允许负值
         pelco_corr = self.config["angle_correction"]
         if pelco_corr["min_elevation"] > pelco_corr["max_elevation"]:
             raise ValueError("最小俯仰角不能大于最大俯仰角")
-        if pelco_corr["min_elevation"] < -180 or pelco_corr["max_elevation"] > 360:
-            raise ValueError("俯仰角范围应在[-180, 360]之间")
         return expected_checksum == actual_checksum
 
     def _apply_angle_correction(self, raw_value: int, cmd_type: int) -> int:
@@ -91,15 +119,12 @@ class PelcoDProtocol:
         config = self.config["angle_correction"]
         abs_min = abs(config["min_elevation"])
 
-        # 处理俯仰角查询响应
-        if cmd_type == 0x53:
-            # 所有查询结果均加上最小角度绝对值
+        if cmd_type == 0x53: # 俯仰
             adjusted = corrected + abs_min
-            adjusted %= 360  # 确保在0-360范围内
+            adjusted %= 360
             return int(adjusted * 100)
 
-        # 处理方位角查询响应
-        elif cmd_type == 0x51:
+        elif cmd_type == 0x51: # 方位
             corrected += config["azimuth_offset"] + config["initial_azimuth"]
             corrected %= 360
             return int(corrected * 100)

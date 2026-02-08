@@ -10,7 +10,7 @@ import win32gui
 import win32print
 import tkinter as tk
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Thread # 导入 Thread
 import ttkbootstrap as ttkb
 from tkinter import messagebox
 import serial.tools.list_ports
@@ -22,8 +22,8 @@ class MainWindow:
     def __init__(self):
         # 宽高自适应系统缩放
         scale = self._get_scaling()
-        base_width = 300
-        base_height = 700
+        base_width = 350
+        base_height = 900
         scaled_width = int(base_width * scale)
         scaled_height = int(base_height * scale)
 
@@ -115,9 +115,12 @@ class MainWindow:
         # 创建俯仰角手动调整区域
         self._create_device_panel(config_frame, "AZ/EL", 2)
 
+        # 插入手动控制面板 (Row=1)
+        self._create_manual_control_panel(main_frame)
+
         # 控制按钮区域
         btn_frame = ttkb.Frame(main_frame)
-        btn_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+        btn_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
         btn_frame.columnconfigure(0, weight=1)  # 左边撑开
         btn_frame.columnconfigure(1, weight=0)  # 按钮
         btn_frame.columnconfigure(2, weight=0)  # 按钮
@@ -212,6 +215,33 @@ class MainWindow:
         elevation_btn = ttkb.Button(parent, text="执行",
                                     command=lambda: self.set_az_el(elevation_entry.get(), 0x4D))
         elevation_btn.grid(row=1, column=2, padx=5)
+        
+        # --- 新增部分：真角度显示与查询按钮 ---
+        # 状态标签
+        self.lbl_status = ttkb.Label(parent, text="状态: 真AZ= -- | EL= --", bootstyle="secondary")
+        self.lbl_status.grid(row=2, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        
+        # 查询按钮
+        c2_btn = ttkb.Button(parent, text="查询C2", bootstyle="info-outline", width=8,
+                             command=self._manual_query_c2)
+        c2_btn.grid(row=2, column=2, padx=5, pady=5)
+        # -----------------------------------
+
+    def update_status_display(self, true_az, el):
+        """回调函数：更新界面状态显示（线程安全）"""
+        def _update():
+            if hasattr(self, 'lbl_status'):
+                self.lbl_status.config(text=f"状态: 真AZ={true_az:.2f} | EL={el:.2f}")
+        
+        self.root.after(0, _update)
+
+    def _manual_query_c2(self):
+        """手动触发查询指令"""
+        if self.running and self.control_system:
+            # 在线程中执行查询，防止卡顿
+            Thread(target=self.control_system._execute_angle_query_command, daemon=True).start()
+        else:
+            self.log("[警告] 系统未启动")
 
     def _create_settings_notebook(self, parent, device):
         """创建参数配置选项卡"""
@@ -466,7 +496,8 @@ class MainWindow:
         if not self.running:
             try:
                 config = self._load_config()
-                self.control_system = ControlSystem(config, self.log)
+                # 传入回调函数 update_status_display
+                self.control_system = ControlSystem(config, self.log, self.update_status_display)
                 self.control_system.start()
                 self.running = True
                 self.start_btn.config(text="停止系统")
@@ -533,6 +564,74 @@ class MainWindow:
             self.control_system.select_angle(angle, set_cmd)
         else:
             self.log("[错误] 系统未启动，无法设置角度")
+
+    # 手动控制面板 和手动控制看门狗相关方法
+    def _create_manual_control_panel(self, parent):
+        """创建十字型手动控制面板"""
+        panel = ttkb.Labelframe(parent, text="云台手动控制 (长按旋转)", bootstyle="info")
+        panel.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+        
+        # 布局配置：3列居中
+        panel.columnconfigure(0, weight=1)
+        panel.columnconfigure(1, weight=1)
+        panel.columnconfigure(2, weight=1)
+
+        # 辅助函数：绑定按下和松开事件
+        def bind_btn(btn, cmd):
+            btn.bind('<ButtonPress-1>', lambda e: self._start_manual_move(cmd))
+            btn.bind('<ButtonRelease-1>', lambda e: self._stop_manual_move())
+
+        # 上
+        btn_up = ttkb.Button(panel, text="▲", bootstyle="secondary")
+        btn_up.grid(row=0, column=1, padx=2, pady=2)
+        bind_btn(btn_up, "up")
+
+        # 左
+        btn_left = ttkb.Button(panel, text="◀", bootstyle="secondary")
+        btn_left.grid(row=1, column=0, padx=2, pady=2)
+        bind_btn(btn_left, "left")
+
+        # 停止 (紧急停止按钮)
+        btn_stop = ttkb.Button(panel, text="■", bootstyle="danger")
+        btn_stop.grid(row=1, column=1, padx=2, pady=2)
+        btn_stop.configure(command=self._stop_manual_move)
+
+        # 右
+        btn_right = ttkb.Button(panel, text="▶", bootstyle="secondary")
+        btn_right.grid(row=1, column=2, padx=2, pady=2)
+        bind_btn(btn_right, "right")
+
+        # 下
+        btn_down = ttkb.Button(panel, text="▼", bootstyle="secondary")
+        btn_down.grid(row=2, column=1, padx=2, pady=2)
+        bind_btn(btn_down, "down")
+
+    def _start_manual_move(self, direction):
+        """开始手动移动"""
+        if not self.running or not self.control_system:
+            return
+        
+        self._current_manual_cmd = direction
+        self._sending_manual = True
+        self._manual_loop()
+
+    def _manual_loop(self):
+        """循环发送指令以维持心跳 (防止GUI卡死导致无限旋转)"""
+        if self._sending_manual and self.running:
+            # 调用 controller 执行移动
+            if hasattr(self.control_system, 'pelco') and self.control_system.pelco:
+                 self.control_system.pelco.move(self._current_manual_cmd)
+            
+            # 200ms 发送一次指令
+            self.root.after(200, self._manual_loop)
+
+    def _stop_manual_move(self, event=None):
+        """停止移动"""
+        self._sending_manual = False
+        if self.running and self.control_system:
+             if hasattr(self.control_system, 'pelco') and self.control_system.pelco:
+                self.control_system.pelco.move("stop")
+
 
     def run(self):
         """启动主循环"""
