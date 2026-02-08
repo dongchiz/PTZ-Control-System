@@ -1,4 +1,11 @@
 # PTZ 云台控制系统
+THIS PROJECT IS BASED ON @SHARKBIA'S PTZ-CONTROL-SYSTEM
+ADDED:   防绕线设计，为全向云台添加上下限
+PLANNED: 
+   UI控制上下限
+   UI手动调整圈数偏差
+   UI真角度显示条
+   1602 LCD显示器
 
 [![License: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -71,7 +78,3 @@ python main.py
 - 允许自由使用、复制、修改、合并、发布
 - 保留版权声明和许可声明
 - 不承担任何担保责任
-
-## 技术支持
-✉️ 联系方式：bg4itd@lhw711.cn  
-🐛 问题反馈：https://github.com/Sharkbia/PTZ-Control-System/issues
