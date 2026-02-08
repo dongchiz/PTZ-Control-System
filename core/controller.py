@@ -215,30 +215,54 @@ class ControlSystem:
             return self._execute_angle_control_command(f"{round(azi)} {round(ele)}")
         except ValueError: return ""
 
+
     def _execute_angle_control_command(self, w_cmd: str) -> str:
         try:
             parts = w_cmd.split()
-            target_az_req = float(parts[0]); target_el_req = float(parts[1])
+            target_az_req = float(parts[0])
+            target_el_req = float(parts[1])
 
-            # W指令逻辑保持不变，但加入锁
+            # --- 第一阶段：查询与计算 ---
             with self.pelco_lock:
+                # 1. 查询当前角度
                 curr_az_raw = self.pelco.query_angle(0x51)
-                self.log("C2 query from W command")
+                
                 if curr_az_raw is not None: 
                     self.rotator.update_raw_angle(curr_az_raw / 100.0)
-                    self.log(f"[命令] W 命令: AZ {target_az_req} EL {target_el_req}, 当前真角度 {self.rotator.current_true_az:.1f}")
+                    self.log(f"[命令] W 指令目标: AZ={target_az_req} EL={target_el_req}")
                 else:
-                    self.log("[警告] 无法读取当前角度，放弃 W 指令")
-                    return ""
+                    self.log("[警告] 无法读取当前角度，为安全起见放弃 W 指令")
+                    return "" 
 
+                # 2. 检查限位 (计算过程很快，放在锁里没问题，也可以拿出来)
                 target_true, direction, is_safe = self.rotator.get_target_plan(target_az_req)
                 if not is_safe:
                     self.log(f"[拒绝] 目标真角度 {target_true:.1f} 超出限位")
                     return "?> \r\n"
 
-                success = (self.pelco.set_angle(target_az_req % 360, 0x4B) and 
-                           self.pelco.set_angle(target_el_req, 0x4D))
-            return "ACK\r\n" if success else ""
+            # =======================================================
+            # 【关键修改】Sleep 移出锁外，期间允许UI线程插队操作串口
+            # =======================================================
+            time.sleep(0.15) 
+
+            # --- 第二阶段：执行水平旋转 ---
+            with self.pelco_lock:
+                success_az = self.pelco.set_angle(target_az_req % 360, 0x4B)
+            
+            # 【关键修改】Sleep 移出锁外
+            time.sleep(0.1) 
+            
+            # --- 第三阶段：执行俯仰旋转 ---
+            with self.pelco_lock:
+                success_el = self.pelco.set_angle(target_el_req, 0x4D)
+
+            # 结果判定
+            if success_az and success_el:
+                return "ACK\r\n"
+            else:
+                self.log("[警告] 部分旋转指令发送失败")
+                return "ACK\r\n"
+                    
         except (IndexError, ValueError) as e:
             self.log(f"[命令] W 命令参数解析失败: {e}")
             return ""
