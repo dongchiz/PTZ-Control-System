@@ -12,8 +12,13 @@ class RotationManager:
     """管理真角度、限位和旋转逻辑"""
     def __init__(self, config):
         self.config = config
-        self.min_az = -360
-        self.max_az = 360
+        
+        # --- [修改] 从配置读取软限位 ---
+        limits = config["pelco"].get("limits", {})
+        self.min_az = limits.get("min_az", -360) # 默认 -360
+        self.max_az = limits.get("max_az", 360)  # 默认 360
+        # -----------------------------
+
         self.offset = config["pelco"]["angle_correction"].get("azimuth_offset", 0)
         
         self.current_true_az = 0.0
@@ -62,6 +67,12 @@ class RotationManager:
     def set_true_angle(self, angle):
         self.current_true_az = angle
 
+    # --- [新增] 圈数校准方法 ---
+    def calibrate_turns(self, turns):
+        """校准圈数：增加或减少 turns * 360 度"""
+        self.current_true_az += (turns * 360.0)
+    # -------------------------
+
 
 class ControlSystem:
     def __init__(self, config, log_callback, status_callback=None):
@@ -71,7 +82,6 @@ class ControlSystem:
         self.status_callback = status_callback
         self.running = False
         self._connection_lock = Lock()
-        # 新增串口互斥锁，防止手动和自动逻辑冲突
         self.pelco_lock = Lock()
         
         self.gs232b = None
@@ -110,7 +120,6 @@ class ControlSystem:
 
     def _update_initial_status(self):
         try:
-            # 初始化也使用线程安全的方式查询
             self._execute_angle_query_command(log=False)
         except Exception as e:
             self.log(f"[警告] 初始角度读取失败: {e}")
@@ -140,16 +149,19 @@ class ControlSystem:
                 if data:
                     self.last_action_time = current_time
                     self.is_returning = False
+                    
                     cmd = GS232BProtocol.parse_command(data)
-                    response = self._process_command(cmd)
-                    if response:
-                        self.gs232b.send(response.encode())
+                    if cmd:
+                        # self.log(f"[命令] 收到命令: {cmd}") 
+                        response = self._process_command(cmd)
+                        if response:
+                            self.gs232b.send(response.encode())
             except Exception as e:
-                self.log(f"[错误] 处理错误: {str(e)}")
+                self.log(f"[错误] 主循环异常: {str(e)}")
 
             if self.manual_move_expire > 0 and current_time > self.manual_move_expire:
                 self.log("[保护] 手动移动心跳超时，停止云台")
-                with self.pelco_lock: # 使用锁保护发送
+                with self.pelco_lock:
                     if self.pelco: self.pelco.move('stop')
                 self.manual_move_expire = 0
 
@@ -172,7 +184,8 @@ class ControlSystem:
         for prefix, handler in command_handlers.items():
             if cmd.startswith(prefix):
                 return handler(cmd[len(prefix):].strip())
-        return ""
+        
+        return "" 
         
     def _handle_stop(self, _) -> str:
         with self.pelco_lock:
@@ -203,6 +216,9 @@ class ControlSystem:
         return self._execute_angle_query_command() if w_result else ""
 
     def _handle_c2(self, _) -> str:
+        # --- [修改] 增加日志打印 ---
+        self.log("[命令] 收到 C2 查询指令")
+        # -------------------------
         return self._execute_angle_query_command()
 
     def _handle_w(self, cmd: str) -> str:
@@ -215,12 +231,10 @@ class ControlSystem:
             return self._execute_angle_control_command(f"{round(azi)} {round(ele)}")
         except ValueError: return ""
 
-
     def _execute_angle_control_command(self, w_cmd: str) -> str:
         try:
             parts = w_cmd.split()
-            target_az_req = float(parts[0])
-            target_el_req = float(parts[1])
+            target_az_req = float(parts[0]); target_el_req = float(parts[1])
 
             # --- 第一阶段：查询与计算 ---
             with self.pelco_lock:
@@ -229,34 +243,30 @@ class ControlSystem:
                 
                 if curr_az_raw is not None: 
                     self.rotator.update_raw_angle(curr_az_raw / 100.0)
-                    self.log(f"[命令] W 指令目标: AZ={target_az_req} EL={target_el_req}")
+                    # self.log(f"[命令] W 指令目标: AZ={target_az_req} EL={target_el_req}")
                 else:
                     self.log("[警告] 无法读取当前角度，为安全起见放弃 W 指令")
                     return "" 
 
-                # 2. 检查限位 (计算过程很快，放在锁里没问题，也可以拿出来)
+                # 2. 检查限位
                 target_true, direction, is_safe = self.rotator.get_target_plan(target_az_req)
                 if not is_safe:
                     self.log(f"[拒绝] 目标真角度 {target_true:.1f} 超出限位")
                     return "?> \r\n"
 
-            # =======================================================
-            # 【关键修改】Sleep 移出锁外，期间允许UI线程插队操作串口
-            # =======================================================
+            # 延时移出锁外
             time.sleep(0.15) 
 
             # --- 第二阶段：执行水平旋转 ---
             with self.pelco_lock:
                 success_az = self.pelco.set_angle(target_az_req % 360, 0x4B)
             
-            # 【关键修改】Sleep 移出锁外
             time.sleep(0.1) 
             
             # --- 第三阶段：执行俯仰旋转 ---
             with self.pelco_lock:
                 success_el = self.pelco.set_angle(target_el_req, 0x4D)
 
-            # 结果判定
             if success_az and success_el:
                 return "ACK\r\n"
             else:
@@ -280,26 +290,24 @@ class ControlSystem:
             if self.status_callback:
                 self.status_callback(self.rotator.current_true_az, elevation / 100.0)
 
+            if log:
+                # self.log(f"[查询] AZ={azimuth_deg} EL={elevation_deg}")
+                pass
+
             return f"AZ={azimuth_deg:03d} EL={elevation_deg:03d}\r\n"
-        return ""
+        else:
+            if log: self.log("[警告] C2查询失败：无法读取角度")
+            return ""
 
     def select_angle(self, angle, set_cmd):
-        """
-        选择角度并执行命令（用于UI的手动调整框）。
-        改进：使用独立线程执行，且优先发送移动指令，解决无响应问题。
-        """
+        """UI手动设置角度"""
         def _worker():
             try:
-                self.log(f"[命令] UI 请求{set_cmd}设置角度 {angle}")
-                
-                # 1. 优先执行移动指令 (减少延迟)
+                self.log(f"[命令] UI 请求设置角度 {angle}")
                 with self.pelco_lock:
                     self.pelco.set_angle(angle, set_cmd)
-
-                # 2. 如果是水平旋转，移动后再查询一次以更新真角度状态
-                #    这步操作即使超时，也不会影响已经在执行的移动动作
+                
                 if set_cmd == 0x4B:
-                    # 短暂延时等待指令生效
                     time.sleep(0.2)
                     self._execute_angle_query_command(log=False)
                     
@@ -308,34 +316,36 @@ class ControlSystem:
 
         Thread(target=_worker, daemon=True).start()
 
+    # --- [新增] 校准接口 ---
+    def calibrate_turns(self, turns):
+        """执行圈数校准"""
+        with self.pelco_lock:
+            self.rotator.calibrate_turns(turns)
+            self.log(f"[校准] 手动调整 {turns:+d} 圈")
+        # 校准后刷新界面显示
+        self._execute_angle_query_command(log=False)
+    # --------------------
+
     def _perform_auto_return(self):
         self.is_returning = True
         self.log("[系统] 自动回中...")
-        
         try:
-            # 获取初始角度
             with self.pelco_lock:
                 current_raw = self.pelco.query_angle(0x51)
-            
             if current_raw is None:
                 self.log("[系统] 无法获取角度，回中中止")
                 return
-                
             start_deg = current_raw / 100.0
             targets = [(start_deg - 120) % 360, (start_deg - 240) % 360, (start_deg - 360) % 360]
             
             for t in targets:
                 if not self.is_returning: return
                 self.log(f"[回中] 正在旋转至 {t:.1f}...")
-                
                 with self.pelco_lock:
                     self.pelco.set_angle(t, 0x4B)
-                
-                # 等待旋转完成 (注意：不要一直持有锁)
                 wait_count = 0
                 while wait_count < 15:
-                    time.sleep(1)
-                    wait_count += 1
+                    time.sleep(1); wait_count += 1
                     if not self.is_returning: return
             
             if self.is_returning:
@@ -343,7 +353,6 @@ class ControlSystem:
                 with self.pelco_lock:
                     self.pelco.set_angle(80, 0x4D)
             self.log("[系统] 自动回中完成")
-            
         except Exception as e:
             self.log(f"[错误] 自动回中异常: {e}")
         finally:
@@ -353,7 +362,7 @@ class ControlSystem:
         with self._connection_lock:
             self.running = False
             if self.gs232b: self.gs232b.close()
-            with self.pelco_lock: # 确保关闭时没有人在用
+            with self.pelco_lock:
                 if self.pelco and self.pelco.hw: self.pelco.hw.close()
             if self.thread.is_alive():
                 self.thread.join(timeout=5)
